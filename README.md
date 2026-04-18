@@ -2,32 +2,54 @@
 
 ## 🚀 Overview
 
-This project demonstrates a basic file system using FUSE (Filesystem in Userspace).
+This project demonstrates a basic user-space filesystem using FUSE (Filesystem in Userspace).
+It mounts a virtual filesystem with one file, `hello.txt`, and supports simple read operations.
 
-## 📁 Features
+## 📁 Project Structure
 
-* Custom virtual filesystem
-* One file: `hello.txt`
-* Supports:
+```
+./
+├── disk.c
+├── fs.h
+├── fusefs
+├── main.c
+├── Makefile
+├── README.md
+└── mountdir/       # mount point directory for testing
+```
 
-  * `ls`
-  * `cat`
+## 🧱 Prerequisites (Ubuntu)
 
-## 🧱 Tech Stack
-
-* C
-* FUSE (libfuse)
-
-## ⚙️ Setup
+Install the required packages before building and running the project:
 
 ```bash
-sudo apt install libfuse-dev fuse pkg-config
+sudo apt update
+sudo apt install -y libfuse-dev fuse pkg-config build-essential
+```
+
+> On Ubuntu, `build-essential` provides `gcc`, `make`, and other common build tools.
+
+## ⚙️ Build and Run
+
+1. Build the filesystem binary:
+
+```bash
 make
-mkdir mountdir
+```
+
+2. Create the mount point directory if it does not exist:
+
+```bash
+mkdir -p mountdir
+```
+
+3. Run the FUSE filesystem:
+
+```bash
 ./fusefs mountdir
 ```
 
-## 🧪 Usage
+4. Open a new terminal or background the process, then access the mounted filesystem:
 
 ```bash
 cd mountdir
@@ -37,25 +59,28 @@ cat hello.txt
 
 ## 🧹 Unmount
 
+When you are done, unmount the filesystem:
+
 ```bash
 fusermount -u mountdir
 ```
 
-## 📌 Output
+## 📌 Expected Output
 
-```
+```bash
 hello.txt
 Hello from FUSE filesystem!
 ```
 
-## 📚 Learnings
+## 💡 Notes
 
-* FUSE architecture
-* File system operations (getattr, read, readdir)
-* Kernel-user space interaction
+* `fusefs` must run with FUSE available on the system.
+* If `./fusefs mountdir` does not return, it is running in foreground and keeping the filesystem mounted.
+* Use `fusermount -u mountdir` to cleanly unmount before deleting `mountdir`.
 
 ## ⭐ Future Improvements
 
 * Add write support
 * Add multiple files
 * Add directory hierarchy
+* Implement deletion and rename operations
