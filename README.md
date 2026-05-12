@@ -25,7 +25,7 @@ cd fuse-fs
 make
 ```
 
-## Runx
+## Run
 
 1. Create a mount directory:
 
@@ -43,6 +43,20 @@ mkdir -p mountdir
 
 ```bash
 cd fuse-fs/mountdir
+```
+
+4. Disconnect/unmount filesystem (when done):
+
+```bash
+# run this from outside mountdir
+fusermount -u mountdir
+```
+
+If you get a "target is busy" error, first leave the mount directory and close files using it, then retry:
+
+```bash
+cd ..
+fusermount -u mountdir
 ```
 
 ## Manual File Operations (Linux-like)
