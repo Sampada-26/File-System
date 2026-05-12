@@ -1,86 +1,120 @@
 # Simple FUSE File System (C)
 
-## 🚀 Overview
+## Overview
 
-This project demonstrates a basic user-space filesystem using FUSE (Filesystem in Userspace).
-It mounts a virtual filesystem with one file, `hello.txt`, and supports simple read operations.
+This project implements a small block-based filesystem in userspace with FUSE.
+You can now manage files and directories manually from the Linux shell like a normal filesystem:
 
-## 📁 Project Structure
+- Create files and directories
+- Write and update file content
+- Truncate files (`>` redirection)
+- Rename/move files and directories
+- Delete files and empty directories
 
-```
-./
-├── disk.c
-├── fs.h
-├── fusefs
-├── main.c
-├── Makefile
-├── README.md
-└── mountdir/       # mount point directory for testing
-```
-
-## 🧱 Prerequisites (Ubuntu)
-
-Install the required packages before building and running the project:
+## Prerequisites (Ubuntu)
 
 ```bash
 sudo apt update
 sudo apt install -y libfuse-dev fuse pkg-config build-essential
 ```
 
-> On Ubuntu, `build-essential` provides `gcc`, `make`, and other common build tools.
-
-## ⚙️ Build and Run
-
-1. Build the filesystem binary:
+## Build
 
 ```bash
+cd fuse-fs
 make
 ```
 
-2. Create the mount point directory if it does not exist:
+## Runx
+
+1. Create a mount directory:
 
 ```bash
 mkdir -p mountdir
 ```
 
-3. Run the FUSE filesystem:
+2. Start filesystem (foreground):
 
 ```bash
 ./fusefs mountdir
 ```
 
-4. Open a new terminal or background the process, then access the mounted filesystem:
+3. Open another terminal and use it:
 
 ```bash
-cd mountdir
-ls
-cat hello.txt
+cd fuse-fs/mountdir
 ```
 
-## 🧹 Unmount
+## Manual File Operations (Linux-like)
 
-When you are done, unmount the filesystem:
+### 1. Create files and directories
+
+```bash
+touch notes.txt
+mkdir docs
+touch docs/todo.txt
+```
+
+### 2. Write and update files
+
+```bash
+echo "first line" > notes.txt
+cat notes.txt
+
+echo "second line" >> notes.txt
+cat notes.txt
+
+echo "replace content" > notes.txt
+cat notes.txt
+```
+
+### 3. Rename / move
+
+```bash
+mv notes.txt notes_old.txt
+mv docs/todo.txt todo_root.txt
+mv todo_root.txt docs/todo.txt
+```
+
+### 4. Delete
+
+```bash
+rm docs/todo.txt
+rmdir docs
+rm notes_old.txt
+```
+
+### 5. Quick full test sequence
+
+```bash
+touch a.txt
+echo "hello" > a.txt
+echo "world" >> a.txt
+cat a.txt
+mv a.txt b.txt
+rm b.txt
+```
+
+## Unmount
+
+From outside `mountdir`:
 
 ```bash
 fusermount -u mountdir
 ```
 
-## 📌 Expected Output
+## Reset filesystem state (optional)
+
+The filesystem stores data in `disk.img`. To start from a clean disk:
 
 ```bash
-hello.txt
-Hello from FUSE filesystem!
+fusermount -u mountdir
+rm -f disk.img
+./fusefs mountdir
 ```
 
-## 💡 Notes
+## Notes
 
-* `fusefs` must run with FUSE available on the system.
-* If `./fusefs mountdir` does not return, it is running in foreground and keeping the filesystem mounted.
-* Use `fusermount -u mountdir` to cleanly unmount before deleting `mountdir`.
-
-## ⭐ Future Improvements
-
-* Add write support
-* Add multiple files
-* Add directory hierarchy
-* Implement deletion and rename operations
+- `./fusefs mountdir` runs in foreground by default.
+- If metadata layout from an old `disk.img` is incompatible, the filesystem auto-formats the image.
+- Current implementation supports up to 12 direct data blocks per file.
