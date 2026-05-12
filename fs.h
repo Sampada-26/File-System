@@ -18,6 +18,10 @@ typedef struct {
     char name[MAX_NAME_LEN + 1];
 } dir_entry;
 
+static inline int dir_entry_is_empty(const dir_entry *entry) {
+    return entry->name[0] == '\0';
+}
+
 typedef struct {
     uint32_t type;           // File type (FT_REG or FT_DIR)
     uint32_t size;           // File size in bytes

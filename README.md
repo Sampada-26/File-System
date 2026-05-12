@@ -15,7 +15,7 @@ You can now manage files and directories manually from the Linux shell like a no
 
 ```bash
 sudo apt update
-sudo apt install -y libfuse-dev fuse pkg-config build-essential
+sudo apt install -y libfuse3-dev fuse3 pkg-config build-essential
 ```
 
 ## Build

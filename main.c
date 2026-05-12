@@ -1,4 +1,4 @@
-#define FUSE_USE_VERSION 26
+#define FUSE_USE_VERSION 31
 
 #include <fuse.h>
 #include <stdio.h>
@@ -81,8 +81,8 @@ static int dir_is_empty(uint32_t dir_inode_num) {
         read_block(dir_inode.direct_blocks[i], block_data);
 
         dir_entry *entries = (dir_entry *)block_data;
-        for (int j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
-            if (entries[j].inode_num == 0) {
+        for (size_t j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
+            if (dir_entry_is_empty(&entries[j])) {
                 continue;
             }
             if (strcmp(entries[j].name, ".") == 0 || strcmp(entries[j].name, "..") == 0) {
@@ -170,7 +170,9 @@ static int truncate_inode(uint32_t inode_num, inode_t *inode, off_t size) {
 }
 
 // ---------------- GET ATTR ----------------
-static int my_getattr(const char *path, struct stat *stbuf) {
+static int my_getattr(const char *path, struct stat *stbuf,
+                      struct fuse_file_info *fi) {
+    (void)fi;
     printf("GETATTR: %s\n", path);
 
     memset(stbuf, 0, sizeof(struct stat));
@@ -203,9 +205,11 @@ static int my_getattr(const char *path, struct stat *stbuf) {
 
 // ---------------- READDIR ----------------
 static int my_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
-                      off_t offset, struct fuse_file_info *fi) {
+                      off_t offset, struct fuse_file_info *fi,
+                      enum fuse_readdir_flags flags) {
     (void)offset;
     (void)fi;
+    (void)flags;
 
     printf("READDIR: %s\n", path);
 
@@ -220,22 +224,22 @@ static int my_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
         return -ENOTDIR;
     }
 
-    filler(buf, ".", NULL, 0);
-    filler(buf, "..", NULL, 0);
+    filler(buf, ".", NULL, 0, 0);
+    filler(buf, "..", NULL, 0, 0);
 
     for (uint32_t i = 0; i < dir_inode.blocks && i < 12; i++) {
         char block_data[BLOCK_SIZE];
         read_block(dir_inode.direct_blocks[i], block_data);
 
         dir_entry *entries = (dir_entry *)block_data;
-        for (int j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
-            if (entries[j].inode_num == 0) {
+        for (size_t j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
+            if (dir_entry_is_empty(&entries[j])) {
                 continue;
             }
             if (strcmp(entries[j].name, ".") == 0 || strcmp(entries[j].name, "..") == 0) {
                 continue;
             }
-            filler(buf, entries[j].name, NULL, 0);
+            filler(buf, entries[j].name, NULL, 0, 0);
         }
     }
 
@@ -294,6 +298,7 @@ static int my_mkdir(const char *path, mode_t mode) {
         return -ENOSPC;
     }
 
+    read_inode(parent_inode_num, &parent_inode);
     parent_inode.modified = time(NULL);
     parent_inode.accessed = time(NULL);
     parent_inode.nlinks++;
@@ -353,6 +358,7 @@ static int my_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
         return -ENOSPC;
     }
 
+    read_inode(parent_inode_num, &parent_inode);
     parent_inode.modified = time(NULL);
     parent_inode.accessed = time(NULL);
     write_inode(parent_inode_num, &parent_inode);
@@ -436,7 +442,8 @@ static int my_write(const char *path, const char *buf, size_t size,
 }
 
 // ---------------- TRUNCATE ----------------
-static int my_truncate(const char *path, off_t size) {
+static int my_truncate(const char *path, off_t size, struct fuse_file_info *fi) {
+    (void)fi;
     printf("TRUNCATE: %s -> %ld\n", path, (long)size);
 
     uint32_t inode_num = path_to_inode(path);
@@ -454,7 +461,9 @@ static int my_truncate(const char *path, off_t size) {
 }
 
 // ---------------- UTIMENS ----------------
-static int my_utimens(const char *path, const struct timespec tv[2]) {
+static int my_utimens(const char *path, const struct timespec tv[2],
+                      struct fuse_file_info *fi) {
+    (void)fi;
     printf("UTIMENS: %s\n", path);
 
     uint32_t inode_num = path_to_inode(path);
@@ -595,8 +604,12 @@ static int my_rmdir(const char *path) {
 }
 
 // ---------------- RENAME ----------------
-static int my_rename(const char *from, const char *to) {
+static int my_rename(const char *from, const char *to, unsigned int flags) {
     printf("RENAME: %s -> %s\n", from, to);
+
+    if (flags != 0) {
+        return -EINVAL;
+    }
 
     if (strcmp(from, to) == 0) {
         return 0;
@@ -651,6 +664,9 @@ static int my_rename(const char *from, const char *to) {
 
     inode_t src_inode;
     read_inode(src_inode_num, &src_inode);
+    int moved_dir_to_new_parent = (src_inode.type == FT_DIR &&
+                                   from_parent_inode_num != to_parent_inode_num);
+    int replaced_dir = 0;
 
     uint32_t dst_inode_num = find_dir_entry(to_parent_inode_num, to_name);
     if (dst_inode_num != (uint32_t)-1) {
@@ -671,9 +687,7 @@ static int my_rename(const char *from, const char *to) {
             remove_dir_entry(to_parent_inode_num, to_name);
             release_inode_data(&dst_inode);
             free_inode(dst_inode_num);
-            if (to_parent_inode.nlinks > 2) {
-                to_parent_inode.nlinks--;
-            }
+            replaced_dir = 1;
         } else {
             remove_dir_entry(to_parent_inode_num, to_name);
             release_inode_data(&dst_inode);
@@ -688,11 +702,18 @@ static int my_rename(const char *from, const char *to) {
         return -ENOSPC;
     }
 
-    if (src_inode.type == FT_DIR && from_parent_inode_num != to_parent_inode_num) {
+    if (moved_dir_to_new_parent) {
         // Update '..' entry inside moved directory.
         remove_dir_entry(src_inode_num, "..");
         add_dir_entry(src_inode_num, "..", to_parent_inode_num);
+    }
 
+    read_inode(from_parent_inode_num, &from_parent_inode);
+    read_inode(to_parent_inode_num, &to_parent_inode);
+    if (replaced_dir && to_parent_inode.nlinks > 2) {
+        to_parent_inode.nlinks--;
+    }
+    if (moved_dir_to_new_parent) {
         if (from_parent_inode.nlinks > 2) {
             from_parent_inode.nlinks--;
         }
@@ -772,8 +793,8 @@ int add_dir_entry(uint32_t dir_inode, const char *name, uint32_t inode_num) {
         read_block(dir_inode_data.direct_blocks[i], block_data);
 
         dir_entry *entries = (dir_entry *)block_data;
-        for (int j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
-            if (entries[j].inode_num == 0) {
+        for (size_t j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
+            if (dir_entry_is_empty(&entries[j])) {
                 entries[j].inode_num = inode_num;
                 strncpy(entries[j].name, name, MAX_NAME_LEN);
                 entries[j].name[MAX_NAME_LEN] = '\0';
@@ -821,8 +842,8 @@ int remove_dir_entry(uint32_t dir_inode, const char *name) {
         read_block(dir_inode_data.direct_blocks[i], block_data);
 
         dir_entry *entries = (dir_entry *)block_data;
-        for (int j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
-            if (entries[j].inode_num != 0 && strcmp(entries[j].name, name) == 0) {
+        for (size_t j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
+            if (!dir_entry_is_empty(&entries[j]) && strcmp(entries[j].name, name) == 0) {
                 entries[j].inode_num = 0;
                 memset(entries[j].name, 0, sizeof(entries[j].name));
                 write_block(dir_inode_data.direct_blocks[i], block_data);
@@ -847,8 +868,8 @@ uint32_t find_dir_entry(uint32_t dir_inode, const char *name) {
         read_block(dir_inode_data.direct_blocks[i], block_data);
 
         dir_entry *entries = (dir_entry *)block_data;
-        for (int j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
-            if (entries[j].inode_num != 0 && strcmp(entries[j].name, name) == 0) {
+        for (size_t j = 0; j < MAX_DIRENTRIES_PER_BLOCK; j++) {
+            if (!dir_entry_is_empty(&entries[j]) && strcmp(entries[j].name, name) == 0) {
                 return entries[j].inode_num;
             }
         }

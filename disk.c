@@ -160,7 +160,7 @@ void format_disk() {
     }
 
     // Mark reserved metadata blocks as used
-    for (int i = 0; i < sb.data_start && i < BLOCK_COUNT; i++) {
+    for (uint32_t i = 0; i < sb.data_start && i < BLOCK_COUNT; i++) {
         block_bitmap[i / 8] |= (1 << (i % 8));
     }
 
@@ -243,7 +243,7 @@ int alloc_block() {
 
 // Free a block
 void free_block(int block_num) {
-    if (block_num < sb.data_start || block_num >= BLOCK_COUNT) {
+    if (block_num < 0 || (uint32_t)block_num < sb.data_start || block_num >= BLOCK_COUNT) {
         return;
     }
 
@@ -298,7 +298,7 @@ void init_fs() {
     }
 
     // Make sure old images are upgraded to current metadata layout.
-    int expected_data_start = data_start_block();
+    uint32_t expected_data_start = (uint32_t)data_start_block();
     if (sb.data_start != expected_data_start) {
         printf("Metadata layout mismatch detected. Reformatting disk image...\n");
         format_disk();
