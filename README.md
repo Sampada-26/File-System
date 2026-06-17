@@ -11,6 +11,15 @@ You can now manage files and directories manually from the Linux shell like a no
 - Rename/move files and directories
 - Delete files and empty directories
 
+## Features
+
+* Block-based filesystem implemented in C using FUSE
+* Supports files and directories
+* Read, write, rename, and delete operations
+* Persistent storage using `disk.img`
+* Compatible with common Linux shell commands
+
+
 ## Prerequisites (Ubuntu)
 
 ```bash
